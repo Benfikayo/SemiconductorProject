@@ -92,9 +92,25 @@ TOKEN_ENDS = TSPECIALS | WSP
 ASPECIALS = TSPECIALS | set("*'%")
 ATTRIBUTE_ENDS = ASPECIALS | WSP
 EXTENDED_ATTRIBUTE_ENDS = ATTRIBUTE_ENDS - set('%')
+NLSET = {'\n', '\r'}
+SPECIALSNL = SPECIALS | NLSET
+
+
+def make_quoted_pairs(value):
+    """Escape dquote and backslash for use within a quoted-string."""
+    return str(value).replace('\\', '\\\\').replace('"', '\\"')
+
+
+def make_parenthesis_pairs(value):
+    """Escape parenthesis and backslash for use within a comment."""
+    return str(value).replace('\\', '\\\\') \
+        .replace('(', '\\(').replace(')', '\\)')
+
 
 def quote_string(value):
-    return '"'+str(value).replace('\\', '\\\\').replace('"', r'\"')+'"'
+    escaped = make_quoted_pairs(value)
+    return f'"{escaped}"'
+
 
 # Match a RFC 2047 word, looks like =?utf-8?q?someword?=
 rfc2047_matcher = re.compile(r'''
@@ -781,7 +797,7 @@ class MimeParameters(TokenList):
                     else:
                         try:
                             value = value.decode(charset, 'surrogateescape')
-                        except LookupError:
+                        except (LookupError, UnicodeEncodeError):
                             # XXX: there should really be a custom defect for
                             # unknown character set to make it easy to find,
                             # because otherwise unknown charset is a silent
@@ -850,8 +866,13 @@ class MsgID(TokenList):
         # message-id tokens may not be folded.
         return str(self) + policy.linesep
 
+
 class MessageID(MsgID):
     token_type = 'message-id'
+
+
+class InvalidMessageID(MessageID):
+    token_type = 'invalid-message-id'
 
 
 class Header(TokenList):
@@ -912,7 +933,7 @@ class WhiteSpaceTerminal(Terminal):
         return ' '
 
     def startswith_fws(self):
-        return True
+        return self and self[0] in WSP
 
 
 class ValueTerminal(Terminal):
@@ -944,6 +965,8 @@ class _InvalidEwError(errors.HeaderParseError):
 # up other parse trees.  Maybe should have  tests for that, too.
 DOT = ValueTerminal('.', 'dot')
 ListSeparator = ValueTerminal(',', 'list-separator')
+ListSeparator.as_ew_allowed = False
+ListSeparator.syntactic_break = False
 RouteComponentMarker = ValueTerminal('@', 'route-component-marker')
 
 #
@@ -1030,7 +1053,7 @@ def get_fws(value):
     fws = WhiteSpaceTerminal(value[:len(value)-len(newvalue)], 'fws')
     return fws, newvalue
 
-def get_encoded_word(value):
+def get_encoded_word(value, terminal_type='vtext'):
     """ encoded-word = "=?" charset "?" encoding "?" encoded-text "?="
 
     """
@@ -1069,7 +1092,7 @@ def get_encoded_word(value):
             ew.append(token)
             continue
         chars, *remainder = _wsp_splitter(text, 1)
-        vtext = ValueTerminal(chars, 'vtext')
+        vtext = ValueTerminal(chars, terminal_type)
         _validate_xtext(vtext)
         ew.append(vtext)
         text = ''.join(remainder)
@@ -1111,7 +1134,7 @@ def get_unstructured(value):
         valid_ew = True
         if value.startswith('=?'):
             try:
-                token, value = get_encoded_word(value)
+                token, value = get_encoded_word(value, 'utext')
             except _InvalidEwError:
                 valid_ew = False
             except errors.HeaderParseError:
@@ -1140,7 +1163,7 @@ def get_unstructured(value):
         # the parser to go in an infinite loop.
         if valid_ew and rfc2047_matcher.search(tok):
             tok, *remainder = value.partition('=?')
-        vtext = ValueTerminal(tok, 'vtext')
+        vtext = ValueTerminal(tok, 'utext')
         _validate_xtext(vtext)
         unstructured.append(vtext)
         value = ''.join(remainder)
@@ -1213,12 +1236,21 @@ def get_bare_quoted_string(value):
         if value[0] in WSP:
             token, value = get_fws(value)
         elif value[:2] == '=?':
+            valid_ew = False
             try:
                 token, value = get_encoded_word(value)
                 bare_quoted_string.defects.append(errors.InvalidHeaderDefect(
                     "encoded word inside quoted string"))
+                valid_ew = True
             except errors.HeaderParseError:
                 token, value = get_qcontent(value)
+            # Collapse the whitespace between two encoded words that occur in a
+            # bare-quoted-string.
+            if valid_ew and len(bare_quoted_string) > 1:
+                if (bare_quoted_string[-1].token_type == 'fws' and
+                        bare_quoted_string[-2].token_type == 'encoded-word'):
+                    bare_quoted_string[-1] = EWWhiteSpaceTerminal(
+                        bare_quoted_string[-1], 'fws')
         else:
             token, value = get_qcontent(value)
         bare_quoted_string.append(token)
@@ -2008,7 +2040,7 @@ def get_address_list(value):
             address_list.defects.append(errors.InvalidHeaderDefect(
                 "invalid address in address-list"))
         if value:  # Must be a , at this point.
-            address_list.append(ValueTerminal(',', 'list-separator'))
+            address_list.append(ListSeparator)
             value = value[1:]
     return address_list, value
 
@@ -2042,7 +2074,7 @@ def get_msg_id(value):
        no-fold-literal = "[" *dtext "]"
     """
     msg_id = MsgID()
-    if value[0] in CFWS_LEADER:
+    if value and value[0] in CFWS_LEADER:
         token, value = get_cfws(value)
         msg_id.append(token)
     if not value or value[0] != '<':
@@ -2110,10 +2142,18 @@ def parse_message_id(value):
     message_id = MessageID()
     try:
         token, value = get_msg_id(value)
-    except errors.HeaderParseError:
-        message_id.defects.append(errors.InvalidHeaderDefect(
-            "Expected msg-id but found {!r}".format(value)))
-    message_id.append(token)
+        message_id.append(token)
+    except errors.HeaderParseError as ex:
+        token = get_unstructured(value)
+        message_id = InvalidMessageID(token)
+        message_id.defects.append(
+            errors.InvalidHeaderDefect("Invalid msg-id: {!r}".format(ex)))
+    else:
+        # Value after parsing a valid msg_id should be None.
+        if value:
+            message_id.defects.append(errors.InvalidHeaderDefect(
+                "Unexpected {!r}".format(value)))
+
     return message_id
 
 #
@@ -2357,7 +2397,7 @@ def get_section(value):
         digits += value[0]
         value = value[1:]
     if digits[0] == '0' and digits != '0':
-        section.defects.append(errors.InvalidHeaderError(
+        section.defects.append(errors.InvalidHeaderDefect(
                 "section number has an invalid leading 0"))
     section.number = int(digits)
     section.append(ValueTerminal(digits, 'digits'))
@@ -2746,6 +2786,7 @@ def _refold_parse_tree(parse_tree, *, policy):
     encoding = 'utf-8' if policy.utf8 else 'us-ascii'
     lines = ['']
     last_ew = None
+    last_charset = None
     wrap_as_ew_blocked = 0
     want_encoding = False
     end_ew_not_allowed = Terminal('', 'wrap_as_ew_blocked')
@@ -2756,9 +2797,13 @@ def _refold_parse_tree(parse_tree, *, policy):
             wrap_as_ew_blocked -= 1
             continue
         tstr = str(part)
-        if part.token_type == 'ptext' and set(tstr) & SPECIALS:
-            # Encode if tstr contains special characters.
-            want_encoding = True
+        if not want_encoding:
+            if part.token_type in ('ptext', 'vtext'):
+                # Encode if tstr contains special characters.
+                want_encoding = not SPECIALSNL.isdisjoint(tstr)
+            else:
+                # Encode if tstr contains newlines.
+                want_encoding = not NLSET.isdisjoint(tstr)
         try:
             tstr.encode(encoding)
             charset = encoding
@@ -2797,13 +2842,28 @@ def _refold_parse_tree(parse_tree, *, policy):
             if not hasattr(part, 'encode'):
                 # It's not a Terminal, do each piece individually.
                 parts = list(part) + parts
-            else:
+                want_encoding = False
+                continue
+            elif part.as_ew_allowed:
                 # It's a terminal, wrap it as an encoded word, possibly
                 # combining it with previously encoded words if allowed.
+                if (last_ew is not None and
+                    charset != last_charset and
+                    (last_charset == 'unknown-8bit' or
+                     last_charset == 'utf-8' and charset != 'us-ascii')):
+                    last_ew = None
                 last_ew = _fold_as_ew(tstr, lines, maxlen, last_ew,
                                       part.ew_combine_allowed, charset)
-            want_encoding = False
-            continue
+                last_charset = charset
+                want_encoding = False
+                continue
+            else:
+                # It's a terminal which should be kept non-encoded
+                # (e.g. a ListSeparator).
+                last_ew = None
+                want_encoding = False
+                # fall through
+
         if len(tstr) <= maxlen - len(lines[-1]):
             lines[-1] += tstr
             continue
@@ -2820,6 +2880,22 @@ def _refold_parse_tree(parse_tree, *, policy):
         if not hasattr(part, 'encode'):
             # It's not a terminal, try folding the subparts.
             newparts = list(part)
+            if part.token_type == 'bare-quoted-string':
+                # To fold a quoted string we need to create a list of terminal
+                # tokens that will render the leading and trailing quotes
+                # and use quoted pairs in the value as appropriate.
+                newparts = (
+                    [ValueTerminal('"', 'ptext')] +
+                    [ValueTerminal(make_quoted_pairs(p), 'ptext')
+                     for p in newparts] +
+                    [ValueTerminal('"', 'ptext')])
+            if part.token_type == 'comment':
+                newparts = (
+                    [ValueTerminal('(', 'ptext')] +
+                    [ValueTerminal(make_parenthesis_pairs(p), 'ptext')
+                     if p.token_type == 'ptext' else p
+                     for p in newparts] +
+                    [ValueTerminal(')', 'ptext')])
             if not part.as_ew_allowed:
                 wrap_as_ew_blocked += 1
                 newparts.append(end_ew_not_allowed)

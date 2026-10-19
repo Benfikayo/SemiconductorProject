@@ -1,7 +1,10 @@
 import unittest
+import unittest.mock
 import os.path
+import subprocess
 import sys
 import test.support
+from test.support import os_helper
 from ctypes import *
 from ctypes.util import find_library
 
@@ -65,16 +68,35 @@ class Test_OpenGL_libs(unittest.TestCase):
         self.gle.gleGetJoinStyle
 
     def test_shell_injection(self):
-        result = find_library('; echo Hello shell > ' + test.support.TESTFN)
-        self.assertFalse(os.path.lexists(test.support.TESTFN))
+        result = find_library('; echo Hello shell > ' + os_helper.TESTFN)
+        self.assertFalse(os.path.lexists(os_helper.TESTFN))
         self.assertIsNone(result)
 
 
 @unittest.skipUnless(sys.platform.startswith('linux'),
                      'Test only valid for Linux')
-class LibPathFindTest(unittest.TestCase):
+class FindLibraryLinux(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        try:
+            p = subprocess.run(['ld', '--version'],
+                               stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL,
+                               text=True)
+        except OSError:
+            pass
+        else:
+            if p.stdout.startswith('mold '):
+                # The mold linker is known to be incompatible with
+                # ctypes.util.find_library. The function is
+                # documented as "Try to find a library..."
+                # and formally soft-deprecated in 3.15+. We
+                # we skip the test rather than try to fix it
+                # (which would risk breaking other unsupported
+                # platforms).
+                raise unittest.SkipTest('Fails when ld is mold')
+
     def test_find_on_libpath(self):
-        import subprocess
         import tempfile
 
         try:
@@ -88,7 +110,7 @@ class LibPathFindTest(unittest.TestCase):
             srcname = os.path.join(d, 'dummy.c')
             libname = 'py_ctypes_test_dummy'
             dstname = os.path.join(d, 'lib%s.so' % libname)
-            with open(srcname, 'w') as f:
+            with open(srcname, 'wb') as f:
                 pass
             self.assertTrue(os.path.exists(srcname))
             # compile the file to a shared library
@@ -100,7 +122,7 @@ class LibPathFindTest(unittest.TestCase):
             # LD_LIBRARY_PATH)
             self.assertIsNone(find_library(libname))
             # now add the location to LD_LIBRARY_PATH
-            with test.support.EnvironmentVarGuard() as env:
+            with os_helper.EnvironmentVarGuard() as env:
                 KEY = 'LD_LIBRARY_PATH'
                 if KEY not in env:
                     v = d
@@ -110,6 +132,18 @@ class LibPathFindTest(unittest.TestCase):
                 # now check that the .so can be found (since in
                 # LD_LIBRARY_PATH)
                 self.assertEqual(find_library(libname), 'lib%s.so' % libname)
+
+    def test_find_library_with_gcc(self):
+        with unittest.mock.patch("ctypes.util._findSoname_ldconfig", lambda *args: None):
+            self.assertNotEqual(find_library('c'), None)
+
+    def test_find_library_with_ld(self):
+        with unittest.mock.patch("ctypes.util._findSoname_ldconfig", lambda *args: None), \
+             unittest.mock.patch("ctypes.util._findLib_gcc", lambda *args: None):
+            self.assertNotEqual(find_library('c'), None)
+
+    def test_gh114257(self):
+        self.assertIsNone(find_library("libc"))
 
 
 if __name__ == "__main__":

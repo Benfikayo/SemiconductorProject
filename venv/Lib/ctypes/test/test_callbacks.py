@@ -1,7 +1,10 @@
 import functools
 import unittest
+from test import support
+
 from ctypes import *
 from ctypes.test import need_symbol
+from _ctypes import CTYPES_MAX_ARGCOUNT
 import _ctypes_test
 
 class Callbacks(unittest.TestCase):
@@ -62,10 +65,12 @@ class Callbacks(unittest.TestCase):
     def test_ulong(self):
         self.check_type(c_ulong, 42)
 
+    @need_symbol('c_longlong')
     def test_longlong(self):
         self.check_type(c_longlong, 42)
         self.check_type(c_longlong, -42)
 
+    @need_symbol('c_ulonglong')
     def test_ulonglong(self):
         self.check_type(c_ulonglong, 42)
 
@@ -79,6 +84,7 @@ class Callbacks(unittest.TestCase):
         self.check_type(c_double, 3.14)
         self.check_type(c_double, -3.14)
 
+    @need_symbol('c_longdouble')
     def test_longdouble(self):
         self.check_type(c_longdouble, 3.14)
         self.check_type(c_longdouble, -3.14)
@@ -86,14 +92,6 @@ class Callbacks(unittest.TestCase):
     def test_char(self):
         self.check_type(c_char, b"x")
         self.check_type(c_char, b"a")
-
-    # disabled: would now (correctly) raise a RuntimeWarning about
-    # a memory leak.  A callback function cannot return a non-integral
-    # C type without causing a memory leak.
-    @unittest.skip('test disabled')
-    def test_char_p(self):
-        self.check_type(c_char_p, "abc")
-        self.check_type(c_char_p, "def")
 
     def test_pyobject(self):
         o = ()
@@ -124,7 +122,7 @@ class Callbacks(unittest.TestCase):
     def test_issue_7959(self):
         proto = self.functype.__func__(None)
 
-        class X(object):
+        class X:
             def func(self): pass
             def __init__(self):
                 self.v = proto(self.func)
@@ -287,7 +285,41 @@ class SampleCallbacksTestCase(unittest.TestCase):
         self.assertEqual(s.second, check.second)
         self.assertEqual(s.third, check.third)
 
-################################################################
+    def test_callback_too_many_args(self):
+        def func(*args):
+            return len(args)
+
+        # valid call with nargs <= CTYPES_MAX_ARGCOUNT
+        proto = CFUNCTYPE(c_int, *(c_int,) * CTYPES_MAX_ARGCOUNT)
+        cb = proto(func)
+        args1 = (1,) * CTYPES_MAX_ARGCOUNT
+        self.assertEqual(cb(*args1), CTYPES_MAX_ARGCOUNT)
+
+        # invalid call with nargs > CTYPES_MAX_ARGCOUNT
+        args2 = (1,) * (CTYPES_MAX_ARGCOUNT + 1)
+        with self.assertRaises(ArgumentError):
+            cb(*args2)
+
+        # error when creating the type with too many arguments
+        with self.assertRaises(ArgumentError):
+            CFUNCTYPE(c_int, *(c_int,) * (CTYPES_MAX_ARGCOUNT + 1))
+
+    def test_convert_result_error(self):
+        def func():
+            return ("tuple",)
+
+        proto = CFUNCTYPE(c_int)
+        ctypes_func = proto(func)
+        with support.catch_unraisable_exception() as cm:
+            # don't test the result since it is an uninitialized value
+            result = ctypes_func()
+
+            self.assertIsInstance(cm.unraisable.exc_value, TypeError)
+            self.assertEqual(cm.unraisable.err_msg,
+                             "Exception ignored on converting result "
+                             "of ctypes callback function")
+            self.assertIs(cm.unraisable.object, func)
+
 
 if __name__ == '__main__':
     unittest.main()

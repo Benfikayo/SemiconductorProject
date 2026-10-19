@@ -1,5 +1,6 @@
 pandas
 numpy
+scipy
 scikit-learn  
 xgboost
 matplotlib
@@ -9,4 +10,10 @@ shap
 seaborn
 joblib
 Flask
+mp-api
+pymatgen
+python-dotenv
+tqdm
+pyarrow
+ipykernel
 -e .

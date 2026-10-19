@@ -1,5 +1,5 @@
 """Utility code for constructing importers, etc."""
-from . import abc
+from ._abc import Loader
 from ._bootstrap import module_from_spec
 from ._bootstrap import _resolve_name
 from ._bootstrap import spec_from_loader
@@ -15,6 +15,7 @@ from contextlib import contextmanager
 import _imp
 import functools
 import sys
+import threading
 import types
 import warnings
 
@@ -29,8 +30,8 @@ def resolve_name(name, package):
     if not name.startswith('.'):
         return name
     elif not package:
-        raise ValueError(f'no package specified for {repr(name)} '
-                         '(required for relative module names)')
+        raise ImportError(f'no package specified for {repr(name)} '
+                          '(required for relative module names)')
     level = 0
     for character in name:
         if character != '.':
@@ -149,7 +150,8 @@ def set_package(fxn):
     """
     @functools.wraps(fxn)
     def set_package_wrapper(*args, **kwargs):
-        warnings.warn('The import system now takes care of this automatically.',
+        warnings.warn('The import system now takes care of this automatically; '
+                      'this decorator is slated for removal in Python 3.12',
                       DeprecationWarning, stacklevel=2)
         module = fxn(*args, **kwargs)
         if getattr(module, '__package__', None) is None:
@@ -168,7 +170,8 @@ def set_loader(fxn):
     """
     @functools.wraps(fxn)
     def set_loader_wrapper(self, *args, **kwargs):
-        warnings.warn('The import system now takes care of this automatically.',
+        warnings.warn('The import system now takes care of this automatically; '
+                      'this decorator is slated for removal in Python 3.12',
                       DeprecationWarning, stacklevel=2)
         module = fxn(self, *args, **kwargs)
         if getattr(module, '__loader__', None) is None:
@@ -195,7 +198,8 @@ def module_for_loader(fxn):
     the second argument.
 
     """
-    warnings.warn('The import system now takes care of this automatically.',
+    warnings.warn('The import system now takes care of this automatically; '
+                  'this decorator is slated for removal in Python 3.12',
                   DeprecationWarning, stacklevel=2)
     @functools.wraps(fxn)
     def module_for_loader_wrapper(self, fullname, *args, **kwargs):
@@ -222,37 +226,53 @@ class _LazyModule(types.ModuleType):
 
     def __getattribute__(self, attr):
         """Trigger the load of the module and return the attribute."""
-        # All module metadata must be garnered from __spec__ in order to avoid
-        # using mutated values.
-        # Stop triggering this method.
-        self.__class__ = types.ModuleType
-        # Get the original name to make sure no object substitution occurred
-        # in sys.modules.
-        original_name = self.__spec__.name
-        # Figure out exactly what attributes were mutated between the creation
-        # of the module and now.
-        attrs_then = self.__spec__.loader_state['__dict__']
-        original_type = self.__spec__.loader_state['__class__']
-        attrs_now = self.__dict__
-        attrs_updated = {}
-        for key, value in attrs_now.items():
-            # Code that set the attribute may have kept a reference to the
-            # assigned object, making identity more important than equality.
-            if key not in attrs_then:
-                attrs_updated[key] = value
-            elif id(attrs_now[key]) != id(attrs_then[key]):
-                attrs_updated[key] = value
-        self.__spec__.loader.exec_module(self)
-        # If exec_module() was used directly there is no guarantee the module
-        # object was put into sys.modules.
-        if original_name in sys.modules:
-            if id(self) != id(sys.modules[original_name]):
-                raise ValueError(f"module object for {original_name!r} "
-                                  "substituted in sys.modules during a lazy "
-                                  "load")
-        # Update after loading since that's what would happen in an eager
-        # loading situation.
-        self.__dict__.update(attrs_updated)
+        __spec__ = object.__getattribute__(self, '__spec__')
+        loader_state = __spec__.loader_state
+        with loader_state['lock']:
+            # Only the first thread to get the lock should trigger the load
+            # and reset the module's class. The rest can now getattr().
+            if object.__getattribute__(self, '__class__') is _LazyModule:
+                # Reentrant calls from the same thread must be allowed to proceed without
+                # triggering the load again.
+                # exec_module() and self-referential imports are the primary ways this can
+                # happen, but in any case we must return something to avoid deadlock.
+                if loader_state['is_loading']:
+                    return object.__getattribute__(self, attr)
+                loader_state['is_loading'] = True
+
+                __dict__ = object.__getattribute__(self, '__dict__')
+
+                # All module metadata must be gathered from __spec__ in order to avoid
+                # using mutated values.
+                # Get the original name to make sure no object substitution occurred
+                # in sys.modules.
+                original_name = __spec__.name
+                # Figure out exactly what attributes were mutated between the creation
+                # of the module and now.
+                attrs_then = loader_state['__dict__']
+                attrs_now = __dict__
+                attrs_updated = {}
+                for key, value in attrs_now.items():
+                    # Code that set an attribute may have kept a reference to the
+                    # assigned object, making identity more important than equality.
+                    if key not in attrs_then:
+                        attrs_updated[key] = value
+                    elif id(attrs_now[key]) != id(attrs_then[key]):
+                        attrs_updated[key] = value
+                __spec__.loader.exec_module(self)
+                # If exec_module() was used directly there is no guarantee the module
+                # object was put into sys.modules.
+                if original_name in sys.modules:
+                    if id(self) != id(sys.modules[original_name]):
+                        raise ValueError(f"module object for {original_name!r} "
+                                          "substituted in sys.modules during a lazy "
+                                          "load")
+                # Update after loading since that's what would happen in an eager
+                # loading situation.
+                __dict__.update(attrs_updated)
+                # Finally, stop triggering this method.
+                self.__class__ = types.ModuleType
+
         return getattr(self, attr)
 
     def __delattr__(self, attr):
@@ -263,7 +283,7 @@ class _LazyModule(types.ModuleType):
         delattr(self, attr)
 
 
-class LazyLoader(abc.Loader):
+class LazyLoader(Loader):
 
     """A loader that creates a module which defers loading until attribute access."""
 
@@ -296,5 +316,7 @@ class LazyLoader(abc.Loader):
         loader_state = {}
         loader_state['__dict__'] = module.__dict__.copy()
         loader_state['__class__'] = module.__class__
+        loader_state['lock'] = threading.RLock()
+        loader_state['is_loading'] = False
         module.__spec__.loader_state = loader_state
         module.__class__ = _LazyModule
