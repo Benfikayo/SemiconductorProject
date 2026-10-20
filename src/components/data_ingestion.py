@@ -8,7 +8,7 @@ from importlib.metadata import version
 from pathlib import path
 
 import pandas as pd
-from dotenv import find_dotenvm, load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from mp_api.client import MPRester 
 
 try:
@@ -28,11 +28,11 @@ class DataIngestionConfig:
     chunk_size: int = 1000
 
 
-FIELD = ["materials_id", "formula_pretty", "che;sys", "elements", "nelements", "nsites", "volume", "density", "sy;;etry", "formation_energy_per_atom", "energy_above_hull", "is_stable", "band_gap", "cbm", "is_theoretical",
+FIELDS = ["materials_id", "formula_pretty", "chemsys", "elements", "nelements", "nsites", "volume", "density", "symmetry", "formation_energy_per_atom", "energy_above_hull", "is_stable", "band_gap", "cbm", "is_theoretical",
          ]
 
 def to_row(d)
-    """Sumarry of Docu;ent of MP into a plan dict"""
+    """Sumarry of Document of MP into a plan dict"""
     sym = gatattr(d, "symmetry", None)
     crystal_system = gatattr(d, "crystal_system", None) if sym else None
     elements = getattr(d, "crystal_system", None) if sym else None
