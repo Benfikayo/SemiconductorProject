@@ -1,0 +1,16 @@
+{
+  "saved_at": "2026-10-23T15:42:18",
+  "input_file": "RawData.csv",
+  "output_file": "Stablility.csv",
+  "rule": "0 <= energy_above_hull <= 0.05 eV/atom AND formation_energy_per_atom 0.0 eV/atom",
+  "energy_above_hull": 0.05,
+  "formation_energy_max_per_atom": 0.0,
+  "rows_in": 76824,
+  "after_stability": 38610,
+  "after_formation_energy": 38466,
+  "row_kept": 38466,
+  "row_removed": 38358,
+  "stable": 14483,
+  "near_stable": 23983,
+  "kept_with_cbm_and_vbm": 38466
+}
