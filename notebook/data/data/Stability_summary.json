@@ -1,7 +1,7 @@
 {
-  "saved_at": "2026-10-23T15:42:18",
+  "saved_at": "2026-10-26T14:19:33",
   "input_file": "RawData.csv",
-  "output_file": "Stablility.csv",
+  "output_file": "Stability.csv",
   "rule": "0 <= energy_above_hull <= 0.05 eV/atom AND formation_energy_per_atom 0.0 eV/atom",
   "energy_above_hull": 0.05,
   "formation_energy_max_per_atom": 0.0,
