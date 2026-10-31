@@ -1,0 +1,14 @@
+{
+  "saved_at": "2026-10-30T14:04:01",
+  "input_file": "Stability.csv",
+  "output_file": "Composition.csv",
+  "min_elements": 1,
+  "max_elements": 3,
+  "rows_in": 38466,
+  "rows_kept": 17384,
+  "rows_removed": 21082,
+  "rows_kept_by_n_elements": {
+    "2": 2333,
+    "3": 15051
+  }
+}

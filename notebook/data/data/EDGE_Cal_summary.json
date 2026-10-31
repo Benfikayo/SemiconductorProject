@@ -1,0 +1,8 @@
+{
+  "saved_at": "2026-10-29T16:39:59",
+  "input_file": "Bandgap.csv",
+  "rows": 7223,
+  "rows_without_chi": 0,
+  "E_e(eV)": 4.5,
+  "formula": "E_CBM = chi - E_FREE - Eg/2 ; E_VBM  = E_CBM + Eg ; chi = geometric mean of atomic (IE + EA)/2"
+}

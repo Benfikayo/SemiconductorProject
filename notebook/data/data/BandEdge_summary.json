@@ -1,0 +1,11 @@
+{
+  "saved_at": "2026-10-30T11:41:24",
+  "input_file": "EDGE_Cal.csv",
+  "output_file": "BandEdge.csv",
+  "edge_window_eV": [
+    1.23,
+    0.0
+  ],
+  "row_in": 7223,
+  "rows_kept": 1949
+}
