@@ -1,5 +1,5 @@
 {
-  "saved_at": "2026-10-31T01:13:48",
+  "saved_at": "2026-11-03T21:22:50",
   "input_file": "BandEdge.csv",
   "output_file": "Toxicity.csv",
   "tier1_toxic": [
@@ -8,24 +8,23 @@
     "Pb",
     "Tl",
     "As",
-    "Be"
-  ],
-  "tier2_caution": [
+    "Be",
+    "Te",
+    "Co",
     "Cr",
     "Ni",
-    "Co",
-    "V",
-    "Sb",
-    "Te",
-    "Se",
-    "Ba"
+    "Sb"
   ],
-  "tier2_removed": false,
+  "tier2_caution": [
+    "Co",
+    "H"
+  ],
+  "tier2_removed": true,
   "radioactive_removed": true,
-  "rows_in": 1949,
-  "removed_toxic": 253,
-  "removed_radioactive": 73,
-  "row_kept": 1625,
-  "row_removed": 324,
-  "kept_with_caution_element": 408
+  "rows_in": 2952,
+  "removed_toxic": 676,
+  "removed_radioactive": 88,
+  "row_kept": 2111,
+  "row_removed": 841,
+  "kept_with_caution_element": 0
 }

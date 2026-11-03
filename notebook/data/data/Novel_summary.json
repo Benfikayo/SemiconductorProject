@@ -1,0 +1,13 @@
+{
+  "saved_at": "2026-11-03T21:52:34",
+  "input_file": "Toxicity.csv",
+  "output_file": "Novel.csv",
+  "reference_file": "RawData.csv",
+  "known_level": "formula",
+  "remove_known_expt": true,
+  "remove_known_icsd": true,
+  "rows_in": 2111,
+  "rows_removed_known": 1249,
+  "rows_after_known_removal": 862,
+  "rows_after_merge": 539
+}

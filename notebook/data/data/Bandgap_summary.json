@@ -1,14 +1,14 @@
 {
-  "saved_at": "2026-10-28T10:34:16",
-  "input_file": "Composition.csv",
+  "saved_at": "2026-11-03T20:03:18",
+  "input_file": "Bandgap_ML.csv",
   "output_file": "Bandgap.csv",
   "gap_window_eV": [
-    1.23,
+    1.5,
     3.0
   ],
-  "require_direct": null,
-  "row_in": 17384,
-  "after_band_gap_window": 7223,
-  "rows_kept": 7223,
-  "gap_type_counts": null
+  "require_direct": false,
+  "require_in_domain": false,
+  "rows_in": 17384,
+  "rows_kept": 6794,
+  "rows_removed": 10590
 }

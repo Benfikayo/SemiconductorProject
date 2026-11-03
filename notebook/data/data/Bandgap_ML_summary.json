@@ -1,0 +1,103 @@
+{
+  "saved_at": "2026-11-03T15:59:22",
+  "input_file": "Composition.csv",
+  "output_file": "Bandgap_ML.csv",
+  "rows_in": 17384,
+  "rows_out": 17384,
+  "gap_window": [
+    null,
+    null
+  ],
+  "training_compounds": 2419,
+  "descriptors": 100,
+  "split_mode": "chemsys",
+  "best_model": "Ensemble (top 3)",
+  "best_model_test": {
+    "Test MAE tuned": 0.425,
+    "Test RMSE": 0.645,
+    "Test R2": 0.843
+  },
+  "comparison": [
+    {
+      "Model": "Ensemble (top 3)",
+      "CV MAE (train)": 0.406,
+      "Test MAE default": NaN,
+      "Test MAE tuned": 0.425,
+      "Test RMSE": 0.645,
+      "Test R2": 0.843,
+      "Minutes": NaN
+    },
+    {
+      "Model": "XGBoost",
+      "CV MAE (train)": 0.409,
+      "Test MAE default": 0.438,
+      "Test MAE tuned": 0.426,
+      "Test RMSE": 0.645,
+      "Test R2": 0.843,
+      "Minutes": 4.591
+    },
+    {
+      "Model": "LightGBM",
+      "CV MAE (train)": 0.411,
+      "Test MAE default": 0.445,
+      "Test MAE tuned": 0.432,
+      "Test RMSE": 0.653,
+      "Test R2": 0.839,
+      "Minutes": 3.628
+    },
+    {
+      "Model": "Hist gradient boosting",
+      "CV MAE (train)": 0.417,
+      "Test MAE default": 0.45,
+      "Test MAE tuned": 0.441,
+      "Test RMSE": 0.666,
+      "Test R2": 0.832,
+      "Minutes": 3.547
+    },
+    {
+      "Model": "Extra trees",
+      "CV MAE (train)": 0.418,
+      "Test MAE default": 0.451,
+      "Test MAE tuned": 0.452,
+      "Test RMSE": 0.677,
+      "Test R2": 0.827,
+      "Minutes": 2.175
+    },
+    {
+      "Model": "CatBoost",
+      "CV MAE (train)": 0.426,
+      "Test MAE default": 0.442,
+      "Test MAE tuned": 0.438,
+      "Test RMSE": 0.659,
+      "Test R2": 0.836,
+      "Minutes": 2.698
+    },
+    {
+      "Model": "SVR",
+      "CV MAE (train)": 0.435,
+      "Test MAE default": 0.484,
+      "Test MAE tuned": 0.477,
+      "Test RMSE": 0.712,
+      "Test R2": 0.809,
+      "Minutes": 0.485
+    },
+    {
+      "Model": "Random forest",
+      "CV MAE (train)": 0.443,
+      "Test MAE default": 0.461,
+      "Test MAE tuned": 0.462,
+      "Test RMSE": 0.668,
+      "Test R2": 0.832,
+      "Minutes": 2.962
+    },
+    {
+      "Model": "Ridge",
+      "CV MAE (train)": 0.575,
+      "Test MAE default": 0.629,
+      "Test MAE tuned": 0.628,
+      "Test RMSE": 0.869,
+      "Test R2": 0.715,
+      "Minutes": 0.056
+    }
+  ]
+}
